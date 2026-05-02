@@ -1,0 +1,97 @@
+name: Subir lote de canciones a YouTube
+
+on:
+  # Cada 2 dias a las 14:00 UTC = 11:00 AM Buenos Aires (1h antes del publish 12hs)
+  # Nota: GitHub Actions cron puede tener delay de hasta 15-30 min, no es exacto
+  schedule:
+    - cron: "0 14 */2 * *"
+  # Permite correrlo manualmente desde la pestaña Actions
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Cuantos videos subir"
+        required: false
+        default: "2"
+      first_offset:
+        description: "Dias en el futuro para el 1er video"
+        required: false
+        default: "4"
+      gap:
+        description: "Dias entre videos consecutivos"
+        required: false
+        default: "1"
+      dry_run:
+        description: "Solo simular (no sube)"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install yt-dlp Pillow imageio-ffmpeg requests \
+                      google-api-python-client google-auth-oauthlib google-auth-httplib2
+
+      - name: Restore Google credentials from secrets
+        env:
+          CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$CLIENT_SECRET_JSON" > credentials/client_secret.json
+          printf '%s' "$TOKEN_JSON" > credentials/token.json
+
+      - name: Run upload batch
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.count }}" ]; then
+            ARGS="$ARGS --count ${{ github.event.inputs.count }}"
+          fi
+          if [ -n "${{ github.event.inputs.first_offset }}" ]; then
+            ARGS="$ARGS --first-offset ${{ github.event.inputs.first_offset }}"
+          fi
+          if [ -n "${{ github.event.inputs.gap }}" ]; then
+            ARGS="$ARGS --gap ${{ github.event.inputs.gap }}"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python scripts/subir_lote.py $ARGS
+
+      - name: Commit updated queue.csv + new token (if refreshed)
+        if: success() || failure()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add queue.csv
+          if git diff --cached --quiet; then
+            echo "No hay cambios en queue.csv"
+          else
+            git commit -m "auto: actualizar queue.csv tras subida"
+            git push
+          fi
+
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_id }}
+          path: |
+            queue.csv
+          retention-days: 14

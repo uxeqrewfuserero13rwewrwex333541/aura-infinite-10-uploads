@@ -1,0 +1,19 @@
+# Credenciales (van por GitHub Secrets, NO al repo)
+credentials/
+*.json.local
+
+# Entorno Python
+venv/
+__pycache__/
+*.pyc
+
+# Carpetas de trabajo (se regeneran)
+temp/
+output/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
