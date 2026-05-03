@@ -50,40 +50,61 @@ PULSE_AMPLITUDE = 0.05            # max scale del vinilo (5%)
 
 def analyze_audio(audio_path: Path, duration: float | None = None
                   ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Analiza el audio y devuelve:
-       - bar_amps: shape (n_frames, NUM_BARS), valores [0..1]
+    """Analiza el audio (STEREO) y devuelve:
+       - bar_amps: shape (n_frames, NUM_BARS), valores [0..1].
+                   Mitad derecha del anillo = canal R, mitad izquierda = canal L.
        - pulse_scales: shape (n_frames,), valores [1.0 .. 1+PULSE_AMPLITUDE]
        - duration_used: duracion real procesada (en segundos)
     """
+    # Cargar STEREO (mono=False). Si el archivo es mono, librosa lo duplica.
     if duration is not None:
-        y, sr = librosa.load(str(audio_path), sr=22050, duration=duration)
+        y_st, sr = librosa.load(str(audio_path), sr=22050, mono=False, duration=duration)
     else:
-        y, sr = librosa.load(str(audio_path), sr=22050)
-    duration_used = len(y) / sr
+        y_st, sr = librosa.load(str(audio_path), sr=22050, mono=False)
+    if y_st.ndim == 1:
+        y_st = np.stack([y_st, y_st])
+    y_l, y_r = y_st[0], y_st[1]
+    duration_used = len(y_l) / sr
 
     n_frames = int(duration_used * FPS)
     hop = max(1, int(sr / FPS))
+    half = NUM_BARS // 2
 
-    # Mel spectrogram con NUM_BARS bandas
-    mel = librosa.feature.melspectrogram(
-        y=y, sr=sr, n_mels=NUM_BARS, hop_length=hop, fmin=40, fmax=11000,
-    )
-    mel_db = librosa.power_to_db(mel, ref=np.max)
-    mel_norm = np.clip((mel_db + 80) / 80, 0, 1)
-    mel_norm = uniform_filter1d(mel_norm, size=3, axis=1)
+    def amps_for(yc: np.ndarray) -> np.ndarray:
+        mel = librosa.feature.melspectrogram(
+            y=yc, sr=sr, n_mels=half, hop_length=hop, fmin=40, fmax=11000,
+        )
+        mel_db = librosa.power_to_db(mel, ref=np.max)
+        mel_norm = np.clip((mel_db + 80) / 80, 0, 1)
+        mel_norm = uniform_filter1d(mel_norm, size=3, axis=1)
+        src_t = np.linspace(0, duration_used, mel_norm.shape[1])
+        dst_t = np.linspace(0, duration_used, n_frames)
+        out = np.zeros((n_frames, half))
+        for b in range(half):
+            out[:, b] = np.interp(dst_t, src_t, mel_norm[b])
+        return out ** SENSITIVITY_GAMMA
 
-    src_t = np.linspace(0, duration_used, mel_norm.shape[1])
-    dst_t = np.linspace(0, duration_used, n_frames)
+    amps_l = amps_for(y_l)
+    amps_r = amps_for(y_r)
+
+    # Distribuir alrededor del anillo:
+    #   - i < NUM_BARS/2  -> mitad DERECHA -> canal R (graves arriba, agudos abajo)
+    #   - i >= NUM_BARS/2 -> mitad IZQUIERDA -> canal L (espejado)
     bar_amps = np.zeros((n_frames, NUM_BARS))
-    for b in range(NUM_BARS):
-        bar_amps[:, b] = np.interp(dst_t, src_t, mel_norm[b])
-    bar_amps = bar_amps ** SENSITIVITY_GAMMA   # gamma alto = menos reactivo
+    for i in range(NUM_BARS):
+        if i < half:
+            j = min(int(i / half * half), half - 1)
+            bar_amps[:, i] = amps_r[:, j]
+        else:
+            j = min(int((NUM_BARS - i) / half * half), half - 1)
+            bar_amps[:, i] = amps_l[:, j]
 
-    # Pulse del vinilo (onset envelope = bass detection)
-    onset = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    # Pulse del vinilo (onset envelope sobre el mix mono)
+    y_mono = (y_l + y_r) / 2
+    onset = librosa.onset.onset_strength(y=y_mono, sr=sr, hop_length=hop)
     onset_t = librosa.frames_to_time(np.arange(len(onset)), sr=sr, hop_length=hop)
     onset_norm = onset / onset.max() if onset.max() > 0 else onset
-    pulse = np.interp(dst_t, onset_t, onset_norm)
+    pulse = np.interp(np.linspace(0, duration_used, n_frames), onset_t, onset_norm)
     pulse_scales = 1.0 + PULSE_AMPLITUDE * pulse
 
     return bar_amps, pulse_scales, duration_used
