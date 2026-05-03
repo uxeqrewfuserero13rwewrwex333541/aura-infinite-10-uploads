@@ -24,6 +24,7 @@ from compose_center import make_vinyl_center, CENTER_STYLES
 from drive_upload import upload_video_to_drive
 from youtube_upload import upload_video_to_youtube, post_comment
 from musicbrainz_lookup import lookup_song, parse_youtube_auto_description
+from radial_visualizer import render_radial_video, VINYL_SIZE
 
 ROOT = Path(__file__).resolve().parent.parent
 VENV_BIN = ROOT / "venv" / "bin"
@@ -302,14 +303,21 @@ def run(url: str, keep_temp: bool = False, force_style: str | None = None,
     style = force_style or random.choice(CENTER_STYLES)
     print(f"[2/5] Estilo del centro: {style.upper()}")
 
-    # Render ESTATICO: imagen completa + audio. Sin animaciones.
-    print("[3/5] Componiendo portada estatica")
+    # COVER (thumbnail) = portada estatica completa con vinilo
+    print("[3/5] Componiendo portada estatica (para thumbnail)")
     cover_png_for_thumb = OUTPUT / f"{slug}_cover.png"
     compose(cover_path=cover_src, title=title, artist=artist,
             out_path=cover_png_for_thumb, center_style=style, bg=bg)
-    print("[4/5] Renderizando video mp4")
+
+    # VIDEO = base SIN vinilo + visualizador radial + vinilo pulsando + audio
+    print("[4/5] Renderizando video con visualizador radial (puede tardar varios minutos)")
+    base_no_center = OUTPUT / f"{slug}_base.png"
+    compose(cover_path=cover_src, title=title, artist=artist,
+            out_path=base_no_center, center_style=style, bg=bg, skip_center=True)
+    vinyl_img = make_vinyl_center(Image.open(cover_src), size=VINYL_SIZE)
     video_path = OUTPUT / f"{slug}.mp4"
-    make_video(cover_png_for_thumb, audio_path, video_path)
+    render_radial_video(base_no_center, vinyl_img, audio_path, video_path)
+    base_no_center.unlink(missing_ok=True)
 
     print(f"[5/5] Generando metadata YouTube")
     # Si no vinieron artists/label por CLI, preguntar interactivamente (salvo skip_prompt)
