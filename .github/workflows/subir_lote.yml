@@ -2,6 +2,7 @@ name: Subir lote de canciones a YouTube
 
 permissions:
   contents: write   # necesario para que el workflow pueda commitear queue.csv
+  issues: write     # necesario para crear el issue de alerta cuando la cola baja
 
 on:
   # Cada 2 dias a las 14:00 UTC = 11:00 AM Buenos Aires (1h antes del publish 12hs)
@@ -78,17 +79,53 @@ jobs:
           fi
           python scripts/subir_lote.py $ARGS
 
-      - name: Commit updated queue.csv + new token (if refreshed)
+      - name: Commit updated queue.csv + audios borrados
         if: success() || failure()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add queue.csv
+          git add queue.csv audios/ 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo "No hay cambios en queue.csv"
+            echo "No hay cambios"
           else
-            git commit -m "auto: actualizar queue.csv tras subida"
+            git commit -m "auto: actualizar queue + cleanup audios usados"
             git push
+          fi
+
+      - name: Alerta si la cola baja (<= 2 audios listos)
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Contar pendientes con audio_local presente
+          READY=$(python3 -c "
+          import csv, os
+          n = 0
+          with open('queue.csv', newline='', encoding='utf-8') as f:
+              for r in csv.DictReader(f):
+                  if (r.get('estado') or '').strip() == 'pendiente':
+                      audio = (r.get('audio_local') or '').strip()
+                      if audio and os.path.exists(audio):
+                          n += 1
+          print(n)
+          ")
+          echo "Audios listos en cola: $READY"
+          if [ "$READY" -le "2" ]; then
+            echo "Cola baja, abriendo issue de alerta..."
+            # Crear o actualizar issue
+            ISSUE=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues?state=open&labels=cola-baja" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print(d[0]['number'] if d else '')")
+            if [ -z "$ISSUE" ]; then
+              curl -s -X POST -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues" \
+                -d "{\"title\":\"🔔 Cola baja: solo $READY audios listos para subir\",\"body\":\"Quedan $READY audios con archivo descargado en el repo. Hora de pasar mas links y correr scripts/descargar_pendientes.py local + push.\",\"labels\":[\"cola-baja\"]}"
+              echo "Issue creado"
+            else
+              echo "Ya hay issue #$ISSUE abierto, no creo otro"
+            fi
           fi
 
       - name: Upload logs as artifact

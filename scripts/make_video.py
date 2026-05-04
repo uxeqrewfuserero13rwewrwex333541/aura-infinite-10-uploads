@@ -284,16 +284,35 @@ def run(url: str, keep_temp: bool = False, force_style: str | None = None,
         publish_date: str | None = None,
         artists: list[str] | None = None,
         label: str | None = None,
-        skip_prompt: bool = False) -> None:
+        skip_prompt: bool = False,
+        audio_local: str | None = None,
+        title_override: str | None = None) -> dict:
+    """Pipeline end-to-end. Si audio_local apunta a una carpeta con song.mp3 + song.jpg,
+    se usa eso en vez de descargar. Devuelve un dict con info del resultado.
+    """
     work = TEMP / "current"
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
 
-    print(f"[1/5] Descargando audio + thumbnail de {url}")
-    meta = fetch_metadata_and_assets(url, work)
-    title = meta.get("title", "video")
-    artist = meta.get("uploader", "")
+    if audio_local:
+        # MODO PRE-DESCARGADO: copiar de audios/<slug>/ a temp y NO tocar YouTube para descargar
+        src_dir = ROOT / audio_local if not Path(audio_local).is_absolute() else Path(audio_local)
+        print(f"[1/5] Usando audio pre-descargado: {src_dir}")
+        if not (src_dir / "song.mp3").exists() or not (src_dir / "song.jpg").exists():
+            raise FileNotFoundError(f"Falta song.mp3 o song.jpg en {src_dir}")
+        shutil.copy(src_dir / "song.mp3", work / "song.mp3")
+        shutil.copy(src_dir / "song.jpg", work / "song.jpg")
+        # Tomamos el titulo del CLI (queue.csv lo guarda) o del nombre de la carpeta
+        title = title_override or src_dir.name
+        artist = ""
+        meta = {"title": title, "uploader": "", "duration": 0, "description": ""}
+    else:
+        print(f"[1/5] Descargando audio + thumbnail de {url}")
+        meta = fetch_metadata_and_assets(url, work)
+        title = meta.get("title", "video")
+        artist = meta.get("uploader", "")
+
     slug = slugify(title)
 
     audio_path = work / "song.mp3"

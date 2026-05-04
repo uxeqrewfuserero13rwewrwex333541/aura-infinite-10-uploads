@@ -16,6 +16,7 @@ CSV: url, publish_date, estado, uploaded_at, video_id, drive_link, notas
 from __future__ import annotations
 import argparse
 import csv
+import shutil
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -29,7 +30,8 @@ from make_video import run as make_video_run
 QUEUE_PATH = ROOT / "queue.csv"
 LOCAL_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 COLUMNS = ["url", "publish_date", "estado", "uploaded_at",
-           "video_id", "drive_link", "notas"]
+           "video_id", "drive_link", "audio_local", "title", "artists",
+           "label", "notas"]
 
 
 def load_queue() -> list[dict]:
@@ -48,13 +50,21 @@ def save_queue(rows: list[dict]) -> None:
 
 
 def pick_pending(rows: list[dict], n: int) -> list[int]:
-    """Devuelve los indices de las primeras N filas con estado='pendiente'."""
+    """Devuelve los indices de las primeras N filas con estado='pendiente'
+    Y que tengan audio_local presente (descargado y pusheado al repo).
+    """
     out: list[int] = []
     for i, r in enumerate(rows):
-        if (r.get("estado") or "pendiente").strip().lower() == "pendiente":
-            out.append(i)
-            if len(out) >= n:
-                break
+        if (r.get("estado") or "pendiente").strip().lower() != "pendiente":
+            continue
+        audio = (r.get("audio_local") or "").strip()
+        if not audio:
+            continue  # sin audio_local no se puede subir desde GitHub Actions
+        if not (ROOT / audio).exists():
+            continue  # audio_local marcado pero archivo no esta
+        out.append(i)
+        if len(out) >= n:
+            break
     return out
 
 
@@ -113,16 +123,33 @@ def main():
         if args.dry_run:
             print("(dry-run, no subo nada)")
             continue
+        # Datos pre-cargados por descargar_pendientes.py
+        audio_local = (row.get("audio_local") or "").strip() or None
+        title_override = (row.get("title") or "").strip() or None
+        artists_str = (row.get("artists") or "").strip()
+        artists = artists_str.split("|") if artists_str else None
+        label = (row.get("label") or "").strip() or None
+
         try:
             make_video_run(
                 url=url,
                 upload=True,
                 publish_date=publish_date,
-                skip_prompt=True,  # en automatico no podemos preguntar
+                skip_prompt=True,
+                audio_local=audio_local,
+                title_override=title_override,
+                artists=artists,
+                label=label,
             )
             row["estado"] = "subido"
             row["uploaded_at"] = datetime.now(LOCAL_TZ).isoformat(timespec="seconds")
             row["publish_date"] = publish_date
+            # Borrar audio del repo (ya subido a Drive como backup)
+            if audio_local:
+                audio_dir = ROOT / audio_local
+                if audio_dir.exists():
+                    shutil.rmtree(audio_dir, ignore_errors=True)
+                    print(f"Borrado audio local: {audio_local}")
             save_queue(rows)
             print(f"OK -> marcado como 'subido' en queue.csv")
         except Exception as e:
