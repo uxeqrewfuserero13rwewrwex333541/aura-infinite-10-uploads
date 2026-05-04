@@ -1,8 +1,8 @@
 url,publish_date,estado,uploaded_at,video_id,drive_link,notas
 https://youtu.be/ZB0amc1TZ3Y,2026-05-06,subido,2026-05-02T21:33:49-03:00,,,re-subido con visualizador stereo
 https://youtu.be/AfJm4CtlcWA,2026-05-07,subido,2026-05-02T21:39:46-03:00,,,re-subido con visualizador stereo
-https://youtu.be/tAcnQYvPl1s,,pendiente,,,,
-https://youtu.be/DQYVi2Rh-dg,,pendiente,,,,
+https://youtu.be/tAcnQYvPl1s,,error,,,," | error: Command '['/opt/hostedtoolcache/Python/3.12.13/x64/bin/yt-dlp', '--dump-single-json', '--no-warnings', 'https://youtu.be/tAcnQYvPl1s']' returned non-zero exit status 1."
+https://youtu.be/DQYVi2Rh-dg,,error,,,," | error: Command '['/opt/hostedtoolcache/Python/3.12.13/x64/bin/yt-dlp', '--dump-single-json', '--no-warnings', 'https://youtu.be/DQYVi2Rh-dg']' returned non-zero exit status 1."
 https://youtu.be/31mfKG8uOm8,,pendiente,,,,
 https://youtu.be/NIUcLnDFOmY,,pendiente,,,,
 https://youtu.be/TVNjKfKTeNU,,pendiente,,,,
