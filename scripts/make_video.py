@@ -28,7 +28,9 @@ from radial_visualizer import render_radial_video, VINYL_SIZE
 
 ROOT = Path(__file__).resolve().parent.parent
 VENV_BIN = ROOT / "venv" / "bin"
-YT_DLP = VENV_BIN / "yt-dlp"
+# Buscar yt-dlp: primero en venv local, sino en PATH global (GitHub Actions usa pip global)
+_VENV_YTDLP = VENV_BIN / "yt-dlp"
+YT_DLP = str(_VENV_YTDLP) if _VENV_YTDLP.exists() else (shutil.which("yt-dlp") or "yt-dlp")
 FFMPEG = get_ffmpeg_exe()
 
 
@@ -43,13 +45,13 @@ def fetch_metadata_and_assets(url: str, work_dir: Path) -> dict:
     work_dir.mkdir(parents=True, exist_ok=True)
     # 1) metadata JSON
     meta_proc = subprocess.run(
-        [str(YT_DLP), "--dump-single-json", "--no-warnings", url],
+        [YT_DLP, "--dump-single-json", "--no-warnings", url],
         capture_output=True, text=True, check=True,
     )
     meta = json.loads(meta_proc.stdout)
     # 2) audio + thumbnail
     subprocess.run([
-        str(YT_DLP),
+        YT_DLP,
         "--ffmpeg-location", FFMPEG,
         "-x", "--audio-format", "mp3", "--audio-quality", "0",
         "--write-thumbnail", "--convert-thumbnails", "jpg",

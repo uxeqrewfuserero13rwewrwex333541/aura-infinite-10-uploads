@@ -47,7 +47,7 @@ VIDEOS_TO_UPDATE = [
 def fetch_source_meta(url: str) -> dict:
     """Descarga metadata del video fuente con yt-dlp (sin bajar audio/video)."""
     out = subprocess.run(
-        [str(ROOT / "venv" / "bin" / "yt-dlp"),
+        [str(ROOT / "venv" / "bin" / "yt-dlp") if (ROOT / "venv" / "bin" / "yt-dlp").exists() else "yt-dlp",
          "--dump-single-json", "--no-warnings", url],
         capture_output=True, text=True, check=True,
     )

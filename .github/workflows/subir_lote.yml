@@ -1,5 +1,8 @@
 name: Subir lote de canciones a YouTube
 
+permissions:
+  contents: write   # necesario para que el workflow pueda commitear queue.csv
+
 on:
   # Cada 2 dias a las 14:00 UTC = 11:00 AM Buenos Aires (1h antes del publish 12hs)
   # Nota: GitHub Actions cron puede tener delay de hasta 15-30 min, no es exacto
