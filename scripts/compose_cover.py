@@ -237,11 +237,15 @@ def compose(cover_path: Path, title: str, artist: str,
     """
     if seed is not None:
         random.seed(seed)
-    # 1 personaje random de personajes/izquierda/ + 1 de personajes/derecha/
+    # Carpetas: el NOMBRE indica HACIA DONDE MIRA el personaje
+    #   personajes/izquierda/ = mira a la izquierda -> se ubica en el lado DERECHO
+    #                           del video (asi "mira hacia el centro" = al vinilo)
+    #   personajes/derecha/   = mira a la derecha   -> se ubica en el lado IZQUIERDO
     if character_path is None:
-        char_left_path, char_right_path = pick_pair_from_sides(
-            PERSONAJES_IZQ, PERSONAJES_DER
-        )
+        # pick_pair_from_sides devuelve (de_izq, de_der). Los cruzamos:
+        mira_izq, mira_der = pick_pair_from_sides(PERSONAJES_IZQ, PERSONAJES_DER)
+        char_left_path = mira_der    # "mira a la derecha" -> se pone a la izquierda
+        char_right_path = mira_izq   # "mira a la izquierda" -> se pone a la derecha
     else:
         char_left_path = character_path
         char_right_path = icon_path or pick_random(PERSONAJES_DER)
