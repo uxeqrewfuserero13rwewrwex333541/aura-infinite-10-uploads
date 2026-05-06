@@ -23,7 +23,9 @@ LOGO_PATH = ROOT / "assets" / "logo_canal.png"
 SPECTRUM_PATH = ROOT / "assets" / "spectrum.png"
 
 W, H = 1920, 1080
-FONT_PATH = "/System/Library/Fonts/Avenir Next.ttc"
+# Fuente del repo (funciona igual en macOS local y Ubuntu en GitHub Actions).
+# Inter Bold, libre, similar a Avenir Next Heavy pero portable.
+FONT_PATH = str(ROOT / "assets" / "fonts" / "Inter-Bold.ttf")
 # Marca de agua del canal: tamano y margen
 LOGO_HEIGHT = 60      # alto en pixels (chico)
 LOGO_MARGIN = 40      # margen desde el borde
@@ -291,19 +293,19 @@ def compose(cover_path: Path, title: str, artist: str,
     # Avenir Next.ttc indices: 0=Regular, 4=DemiBold, 6=Bold, 8=Heavy.
     # Heavy = el peso mas grueso, similar al "playlist." del ejemplo.
     try:
-        font_title = ImageFont.truetype(FONT_PATH, 56, index=8)
+        font_title = ImageFont.truetype(FONT_PATH, 80)
     except (OSError, IOError):
-        try:
-            font_title = ImageFont.truetype(FONT_PATH, 56)
-        except (OSError, IOError):
-            font_title = ImageFont.load_default()
+        font_title = ImageFont.load_default()
 
     title_y = int(H * 0.86)
     title_bbox = draw.textbbox((0, 0), title, font=font_title)
     tw = title_bbox[2] - title_bbox[0]
     th = title_bbox[3] - title_bbox[1]
     title_x = (W - tw) / 2
-    draw.text((title_x, title_y), title, fill=text_color, font=font_title)
+    # Borde blanco alrededor del texto (stroke)
+    stroke_color = (255, 255, 255) if bg == "black" else (255, 255, 255)
+    draw.text((title_x, title_y), title, fill=text_color, font=font_title,
+              stroke_width=4, stroke_fill=stroke_color)
 
     # 4b) ESPECTROS a izq y derecha del titulo
     if SPECTRUM_PATH.exists():
